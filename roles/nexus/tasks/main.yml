@@ -1,0 +1,177 @@
+---
+- include_role: name=isit-certificate
+
+- name: install nginx
+  yum: name=nginx state=present disablerepo=myrepo
+  tags:
+    - install
+
+- name: download nexus tar file from repo
+  get_url:
+    url: "http://artifactory.wen.com/sonatype/nexus-{{ nexus.version }}-unix.tar.gz"
+    dest: "/tmp/nexus-{{ nexus.version }}-unix.tar.gz"
+  tags:
+    - upgrade
+    - install
+
+- name: create "nexus" group
+  group:
+    name: 'nexus'
+    state: present
+  tags:
+    - install
+
+- name: create "nexus" user
+  user:
+    name: 'nexus' 
+    group: 'nexus' 
+    shell: "/bin/bash"
+    state: present
+  tags:
+    - install
+
+- name: create {{nexus.dir}} directory
+  file: 
+    path: "{{ nexus.dir }}"
+    state: directory
+    owner: 'nexus'
+    group: 'nexus'
+  tags:
+    - install
+
+- name: extract nexus to {{nexus.dir}}
+  unarchive:
+    src: "/tmp/nexus-{{ nexus.version }}-unix.tar.gz"
+    dest: "{{ nexus.dir }}"
+    copy: false  
+    owner: nexus
+  tags:
+    - upgrade
+    - install
+
+- name: change ownership for data
+  file:
+    dest: "{{ nexus.dir }}/sonatype-work/nexus3"
+    owner: nexus
+    group: nexus
+    mode: 0755
+    recurse: yes
+
+
+- name: change ownership for app
+  file:
+    dest: "{{ nexus.dir }}/nexus-{{ nexus.version }}/etc"
+    owner: nexus
+    group: nexus
+    mode: 0755
+    recurse: yes
+
+- name: point to the latest version
+  file:
+    path: "{{ nexus.dir }}/nexus-latest"
+    src: "{{ nexus.dir }}/nexus-{{ nexus.version }}"
+    owner: 'nexus'
+    group: 'nexus'
+    state: link
+  tags:
+    - update
+    - install
+
+- name: set nexus running user
+  lineinfile:
+    dest: "{{ nexus.dir }}/nexus-latest/bin/nexus.rc"
+    regexp: ".*run_as_user=.*"
+    line: "run_as_user=nexus"
+  tags:
+    - upgrade
+    - install
+
+- name: create customer properties file
+  copy:
+    src: 'nexus.properties'
+    dest: "{{ nexus.dir }}/sonatype-work/nexus3/etc"
+    owner: root
+    group: root
+    mode: 0644
+
+  
+- name: create systemd service configuration
+  template:
+    src: nexus.service
+    dest: "/etc/systemd/system"
+  tags:
+    - upgrade
+    - install
+
+
+- name: create keystores
+  command: "keytool -genkeypair -keystore {{ nexus.dir }}/nexus-latest/etc/ssl/keystore.jks -storepass password -keypass password -alias jetty -keyalg RSA -keysize 2048 -validity 5000 -dname \"CN=*.wen.com, OU=Sonatype, O=Sonatype, L=Unspecified, ST=Unspecified, C=US\" -ext \"SAN=DNS:{{ inventory_hostname}},IP:{{ ansible_default_ipv4.address }}\" -ext \"BC=ca:true\"\"
+  tags:
+    - install
+
+- name: stop systemd service
+  command: 'systemctl stop nexus.service'
+  tags:
+    - upgrade
+
+- name: clean cache for upgrade process
+  file:
+    path: "{{ nexus.dir }}/sonatype-work/nexus3/clean_cache"
+    state: touch
+  tags:
+    - upgrade
+
+- name: reload systemd service configuration
+  command: 'systemctl daemon-reload'
+  tags:
+    - upgrade
+
+- name: enable systemd service
+  command: 'systemctl enable nexus.service'
+  tags:
+    - install
+
+- name: start systemd service
+  command: 'systemctl start nexus.service'
+  tags:
+    - upgrade
+    - install
+
+- name: waiting for service to be ready...
+  wait_for:
+    path: "{{ nexus.dir }}/sonatype-work/nexus3/log/nexus.log"
+    search_regex: "Started Sonatype Nexus OSS .*"
+    timeout: 600
+  tags:
+    - upgrade
+    - install
+
+- name: waiting for nexus to be ready...
+  wait_for:
+    port: "{{ nexus.port }}"
+    delay: 5
+  tags:
+    - upgrade
+    - install
+
+- name: check if nginx is running
+  service: 
+    name: nginx 
+    state: started 
+    enabled: yes
+  tags:
+    - upgrade
+    - install
+
+
+- name: copy nginx nexus config file for port forwarding
+  copy:
+    src: 'nginx_nexus.conf'
+    dest: '/etc/nginx/conf.d'
+    owner: root
+    group: root
+    mode: 0644
+
+
+- name: reload nginx
+  command: '/usr/bin/env nginx -s reload'

@@ -1,0 +1,9 @@
+---
+nexus:
+  version: '3.5.0-02'
+  port:  '8081'
+  dir: '/opt/nexus'
+
+  dependencies:
+    - java-1.8.0-openjdk-devel-1.8.0.131
+    - nginx-1.10.2
