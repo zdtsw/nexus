@@ -105,7 +105,7 @@
 
 
 - name: create keystores
-  command: "keytool -genkeypair -keystore {{ nexus.dir }}/nexus-latest/etc/ssl/keystore.jks -storepass password -keypass password -alias jetty -keyalg RSA -keysize 2048 -validity 5000 -dname \"CN=*.wen.com, OU=Sonatype, O=Sonatype, L=Unspecified, ST=Unspecified, C=US\" -ext \"SAN=DNS:{{ inventory_hostname}},IP:{{ ansible_default_ipv4.address }}\" -ext \"BC=ca:true\"\"
+  command: "keytool -genkeypair -keystore {{ nexus.dir }}/nexus-latest/etc/ssl/keystore.jks -storepass password -keypass password -alias jetty -keyalg RSA -keysize 2048 -validity 5000 -dname \"CN=*.wen.com, OU=Sonatype, O=Sonatype, L=Unspecified, ST=Unspecified, C=US\" -ext \"SAN=DNS:{{ inventory_hostname}},IP:{{ ansible_default_ipv4.address }}\" -ext \"BC=ca:true\" "
   tags:
     - install
 
