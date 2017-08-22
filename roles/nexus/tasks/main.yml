@@ -1,14 +1,18 @@
 ---
+- name: install nexus dependencies
+  yum: name={{ item }} state=present
+  with_items: "{{ nexus.dependencies }}"
+
 - include_role: name=isit-certificate
 
 - name: install nginx
-  yum: name=nginx state=present disablerepo=myrepo
+  yum: name=nginx state=present
   tags:
     - install
 
 - name: download nexus tar file from repo
   get_url:
-    url: "http://artifactory.wen.com/sonatype/nexus-{{ nexus.version }}-unix.tar.gz"
+    url: "http://myrepo.wen.com/sonatype/nexus-{{ nexus.version }}-unix.tar.gz"
     dest: "/tmp/nexus-{{ nexus.version }}-unix.tar.gz"
   tags:
     - upgrade
@@ -89,9 +93,9 @@
 - name: create customer properties file
   copy:
     src: 'nexus.properties'
-    dest: "{{ nexus.dir }}/sonatype-work/nexus3/etc"
-    owner: root
-    group: root
+    dest: "{{ nexus.dir }}/sonatype-work/nexus3/etc/"
+    owner: nexus 
+    group: nexus 
     mode: 0644
 
   
@@ -104,10 +108,13 @@
     - install
 
 
+- name: check if keystores exists
+  stat: path={{ nexus.dir }}/nexus-latest/etc/ssl/keystore.jks"
+  register: ks_file
+
 - name: create keystores
   command: "keytool -genkeypair -keystore {{ nexus.dir }}/nexus-latest/etc/ssl/keystore.jks -storepass password -keypass password -alias jetty -keyalg RSA -keysize 2048 -validity 5000 -dname \"CN=*.wen.com, OU=Sonatype, O=Sonatype, L=Unspecified, ST=Unspecified, C=US\" -ext \"SAN=DNS:{{ inventory_hostname}},IP:{{ ansible_default_ipv4.address }}\" -ext \"BC=ca:true\" "
-  tags:
-    - install
+  when: (ks_file.stat.exists == false)
 
 - name: stop systemd service
   command: 'systemctl stop nexus.service'
